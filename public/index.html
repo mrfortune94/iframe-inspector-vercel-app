@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proxy Iframe Inspector (Vercel)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>Proxy-based Iframe Inspector</h1>
+  <input id="urlInput" placeholder="Enter URL to inspect" />
+  <button id="loadBtn">Load & Inspect</button>
+  <div id="container">
+    <iframe id="liveView" sandbox="allow-scripts allow-same-origin" frameborder="0"></iframe>
+    <pre id="sourceView"></pre>
+  </div>
+  <script src="client.js"></script>
+</body>
+</html>
