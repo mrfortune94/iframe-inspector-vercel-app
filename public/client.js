@@ -4,23 +4,24 @@ const loadBtn = document.getElementById('loadBtn');
 const sourceView = document.getElementById('sourceView');
 const liveView = document.getElementById('liveView');
 
-// Advanced controls: custom headers, method selector, injectLog, download toggle
+// Add advanced controls to UI
 const controlsDiv = document.createElement('div');
 controlsDiv.innerHTML = `
   <label>HTTP Method:
-    <select id="methodSelect">
-      <option value="GET">GET</option>
-      <option value="POST">POST</option>
-    </select>
+    <select id="methodSelect"><option value="GET">GET</option><option value="POST">POST</option></select>
   </label>
   <label>Custom Headers (JSON):
     <input id="headersInput" style="width: 300px" placeholder='{"User-Agent":"Custom"}'/>
+  </label>
+  <label>Auth Header (Bearer):
+    <input id="authInput" style="width: 220px" placeholder='YourTokenHere'/>
   </label>
   <label>
     <input type="checkbox" id="injectLogChk"/> Inject logging script
   </label>
   <button id="downloadHtmlBtn">Download HTML Source</button>
   <button id="extractScriptsBtn">Extract & Download JS</button>
+  <button id="showCORSBtn">Show CORS Headers</button>
 `;
 sourceView.parentNode.insertBefore(controlsDiv, sourceView.nextSibling);
 
@@ -35,10 +36,12 @@ loadBtn.addEventListener('click', async () => {
   if (headersStr) {
     try { headers = JSON.parse(headersStr); } catch {}
   }
+  const authVal = document.getElementById('authInput').value;
+  if (authVal) headers['Authorization'] = 'Bearer ' + authVal;
   const injectLog = document.getElementById('injectLogChk').checked;
 
   let apiUrl = `/api/fetch?url=${encodeURIComponent(url)}`;
-  if (headersStr) apiUrl += `&headers=${encodeURIComponent(headersStr)}`;
+  if (Object.keys(headers).length) apiUrl += `&headers=${encodeURIComponent(JSON.stringify(headers))}`;
   if (injectLog) apiUrl += `&injectLog=1`;
 
   let options = { method };
@@ -56,6 +59,9 @@ loadBtn.addEventListener('click', async () => {
 
     const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     liveView.src = blobUrl;
+
+    // Auto-populate scripts to help user find downloadable options
+    autoExtractScriptList(html);
   } catch (error) {
     alert('Error loading page: ' + error.message);
   }
@@ -79,9 +85,7 @@ document.getElementById('downloadHtmlBtn').onclick = () => {
 document.getElementById('extractScriptsBtn').onclick = async () => {
   const htmlText = sourceView.textContent;
   const scriptUrls = [];
-  // Find script tags with src attributes
   htmlText.replace(/<scripts+[^>]*src=["']([^"']+)["'][^>]*>/gi, (_, src) => {
-    // Absolute or resolve relative
     let u = src;
     if (!/^https?:///i.test(u)) {
       try {
@@ -93,8 +97,6 @@ document.getElementById('extractScriptsBtn').onclick = async () => {
     scriptUrls.push(u);
   });
   if (!scriptUrls.length) return alert('No external scripts found');
-  
-  // Download each JS file via proxy
   for (const jsUrl of scriptUrls) {
     try {
       const apiUrl = `/api/fetch?url=${encodeURIComponent(jsUrl)}&download=true`;
@@ -114,3 +116,46 @@ document.getElementById('extractScriptsBtn').onclick = async () => {
     }
   }
 };
+
+// Show CORS Headers Button
+document.getElementById('showCORSBtn').onclick = async () => {
+  const url = urlInput.value.trim();
+  if (!url) return alert('Enter URL first!');
+  let apiUrl = `/api/fetch?url=${encodeURIComponent(url)}`;
+  try {
+    const response = await fetch(apiUrl, { method: 'HEAD' });
+    const headers = [];
+    response.headers.forEach((val, name) => headers.push(`${name}: ${val}`));
+    alert('CORS-related Headers:
+' + headers.filter(h => h.toLowerCase().includes('access-control')).join('
+') || 'No CORS headers found.');
+  } catch (e) {
+    alert('Error fetching CORS headers.');
+  }
+};
+
+// Auto-extract and show script links from HTML (just lists for convenience)
+function autoExtractScriptList(html) {
+  let scriptUrls = [];
+  html.replace(/<scripts+[^>]*src=["']([^"']+)["'][^>]*>/gi, (_, src) => {
+    let u = src;
+    if (!/^https?:///i.test(u)) {
+      try {
+        const pageUrl = urlInput.value.trim();
+        const newUrl = new URL(u, pageUrl);
+        u = newUrl.href;
+      } catch {}
+    }
+    scriptUrls.push(u);
+  });
+  let scriptListDiv = document.getElementById('scriptListDiv');
+  if (!scriptListDiv) {
+    scriptListDiv = document.createElement('div');
+    scriptListDiv.id = 'scriptListDiv';
+    scriptListDiv.style.marginTop = '10px';
+    sourceView.parentNode.insertBefore(scriptListDiv, sourceView.nextSibling);
+  }
+  scriptListDiv.innerHTML = scriptUrls.length ?
+    `<b>Detected External Scripts:</b><br>${scriptUrls.map(s => `<a href="${s}" target="_blank">${s}</a>`).join('<br>')}` :
+    '';
+}
